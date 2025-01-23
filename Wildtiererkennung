@@ -1,0 +1,19 @@
+
+from ultralytics import YOLO
+import kagglehub
+import os
+
+# Download latest version
+path = kagglehub.dataset_download("antoreepjana/animals-detection-images-dataset")
+
+print("Path to dataset files:", path)
+
+# Load a pre-trained model (e.g., YOLOv8n for YOLOv8 Nano)
+model = YOLO("yolov8n.pt")
+
+# Perform inference on an image
+results = model("Bildschirmfoto-2015-03-06-um-00.05.09-3238183693.png")
+
+# Display the results
+for result in results:
+    result.show()
