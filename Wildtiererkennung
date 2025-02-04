@@ -1,19 +1,291 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jan 23 17:15:37 2025
+
+@author: csbc4100
+"""
 
 from ultralytics import YOLO
 import kagglehub
 import os
+import numpy as np
+import glob
+import pandas as pd
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import f1_score
+import timeit
+import xlsxwriter
+import openpyxl
 
-# Download latest version
+import cv2
+
+start = timeit.default_timer()
+
+#########################################################
+# YOLO - Prediction
+#########################################################
+
+model = YOLO("yolov8n.pt")
+prediction_dict = {0: 'person',
+ 1: 'bicycle',
+ 2: 'car',
+ 3: 'motorcycle',
+ 4: 'airplane',
+ 5: 'bus',
+ 6: 'train',
+ 7: 'truck',
+ 8: 'boat',
+ 9: 'traffic light',
+ 10: 'fire hydrant',
+ 11: 'stop sign',
+ 12: 'parking meter',
+ 13: 'bench',
+ 14: 'bird',
+ 15: 'cat',
+ 16: 'dog',
+ 17: 'horse',
+ 18: 'sheep',
+ 19: 'cow',
+ 20: 'elephant',
+ 21: 'bear',
+ 22: 'zebra',
+ 23: 'giraffe',
+ 24: 'backpack',
+ 25: 'umbrella',
+ 26: 'handbag',
+ 27: 'tie',
+ 28: 'suitcase',
+ 29: 'frisbee',
+ 30: 'skis',
+ 31: 'snowboard',
+ 32: 'sports ball',
+ 33: 'kite',
+ 34: 'baseball bat',
+ 35: 'baseball glove',
+ 36: 'skateboard',
+ 37: 'surfboard',
+ 38: 'tennis racket',
+ 39: 'bottle',
+ 40: 'wine glass',
+ 41: 'cup',
+ 42: 'fork',
+ 43: 'knife',
+ 44: 'spoon',
+ 45: 'bowl',
+ 46: 'banana',
+ 47: 'apple',
+ 48: 'sandwich',
+ 49: 'orange',
+ 50: 'broccoli',
+ 51: 'carrot',
+ 52: 'hot dog',
+ 53: 'pizza',
+ 54: 'donut',
+ 55: 'cake',
+ 56: 'chair',
+ 57: 'couch',
+ 58: 'potted plant',
+ 59: 'bed',
+ 60: 'dining table',
+ 61: 'toilet',
+ 62: 'tv',
+ 63: 'laptop',
+ 64: 'mouse',
+ 65: 'remote',
+ 66: 'keyboard',
+ 67: 'cell phone',
+ 68: 'microwave',
+ 69: 'oven',
+ 70: 'toaster',
+ 71: 'sink',
+ 72: 'refrigerator',
+ 73: 'book',
+ 74: 'clock',
+ 75: 'vase',
+ 76: 'scissors',
+ 77: 'teddy bear',
+ 78: 'hair drier',
+ 79: 'toothbrush'}
+
+prediction = list(prediction_dict.values())
+
+
+#Prediction for the Pretrained Classes
+
+prediction_animals_dict = {
+ 14: 'bird',
+ 15: 'cat',
+ 16: 'dog',
+ 17: 'horse',
+ 18: 'sheep',
+ 19: 'cow',
+ 20: 'elephant',
+ 21: 'bear',
+ 22: 'zebra',
+ 23: 'giraffe',
+}
+
+prediction = list(prediction_dict.values()) #All YOLOv8 classes
+prediction_animals = list(prediction_dict.values()) #All animal classes from pretrained YOLOv8 model
+
+
+#########################################################
+# Kagglehub - Reference
+#########################################################
+
+"""
 path = kagglehub.dataset_download("antoreepjana/animals-detection-images-dataset")
 
 print("Path to dataset files:", path)
+"""
 
-# Load a pre-trained model (e.g., YOLOv8n for YOLOv8 Nano)
-model = YOLO("yolov8n.pt")
+#path = r"\\nethome\~\User\Desktop\tiere" #little test
+path = r"C:\Users\csbc4100\.cache\kagglehub\datasets\antoreepjana\animals-detection-images-dataset\versions\7\test"
+reference = os.listdir(path) #List: Folder names, Animals; Full list
 
-# Perform inference on an image
-results = model("Bildschirmfoto-2015-03-06-um-00.05.09-3238183693.png")
+path_shortened = r"C:\Users\csbc4100\.cache\kagglehub\datasets\antoreepjana\animals-detection-images-dataset\versions\7\test_C2"
+reference_shortened = os.listdir(path_shortened)
 
-# Display the results
-for result in results:
-    result.show()
+#Reference list
+
+def accessresults(results, prediction_dictionary): #access the name of the class through the result tensor from YOLO
+
+    try:
+        # Check if there are any boxes in the results
+        if results[0].boxes is not None and len(results[0].boxes) > 0:
+            labels = prediction_dictionary  # Dictionary mapping YOLO class IDs to class names
+            pred = results[0].boxes
+            
+            # Sort predictions by confidence in descending order
+            pred = sorted(pred, key=lambda x: x.conf, reverse=True)  # Assuming `conf` is the confidence attribute
+            
+            # Take the class name of the top prediction (highest confidence)
+            top_prediction = pred[0]
+            class_id = int(top_prediction.cls)  # Class ID
+            class_name = labels[class_id]  # Class name from the dictionary
+        
+        else:
+            # No detections
+            class_name = "no_detection"
+
+    except Exception as e:
+        # Handle errors by returning a default value
+        class_name = "no_detection"
+        
+    return class_name 
+
+
+#creates Predictions and References list
+#Works only in the case of a folder with each animal as a folder inside
+#Ursprüngliche Matrix
+predictions = []
+references = []
+
+#gekürzte Matrix
+predictions_animals = []
+predictions_animals_shortened = []
+references_shortened = []
+
+
+#Each animal/folder accessed    
+for animal in reference:
+
+    jpgs = glob.glob(f"{path}\{animal}/*.jpg")  #accesses all jpgs
+    for jpg in jpgs:
+        #prediction results
+        results = model(jpg)
+#        results = model.predict(jpg)
+        #list reference
+        references.append(animal)
+        
+        
+        for result in results:           
+#            result.show() #pop-up picture
+            p = accessresults(result, prediction_dict) #whole yolov8 list
+            predictions.append(p)
+
+            #Predictions of only animals from yolov8            
+            pa = accessresults(result, prediction_animals_dict) #only animals list
+            predictions_animals.append(pa)
+ 
+
+references = [name[0].lower() + name[1:] if name else name for name in references]
+
+#Each animal/folder accessed    
+for animal in reference_shortened:
+
+    jpgs = glob.glob(f"{path_shortened}\{animal}/*.jpg")  #accesses all jpgs
+    for jpg in jpgs:
+        #prediction results
+        results = model(jpg)
+#        results = model.predict(jpg)
+        references_shortened.append(animal)
+        
+        
+        for result in results:           
+
+            #Predictions of only animals from yolov8            
+            pa = accessresults(result, prediction_animals_dict)
+            predictions_animals_shortened.append(pa)
+ 
+
+references_shortened = [name[0].lower() + name[1:] if name else name for name in references_shortened]
+
+
+
+#########################################################
+# Metrics
+#########################################################
+
+def confmat(predictions,references):
+
+    labels = list(set(predictions + references))  # Combine unique values from both lists
+    cm = confusion_matrix(references, predictions, labels=labels)
+    cm_with_totals = np.c_[cm, cm.sum(axis=1)]                                      # Add row totals
+    cm_with_totals = np.r_[cm_with_totals, [cm.sum(axis=0).tolist() + [cm.sum()]]]  # Add column totals
+    # Convert to DataFrame
+    labels_with_totals = labels + ["Total"]
+#    df = pd.DataFrame(cm_with_totals, index=labels_with_totals, columns=labels_with_totals)
+    df = pd.DataFrame(cm_with_totals, index=[f"True: {label}" for label in labels_with_totals], columns=[f"Pred: {label}" for label in labels_with_totals])
+
+#    df = pd.DataFrame(cm, index=[f"True: {label}" for label in labels], columns=[f"Pred: {label}" for label in labels]) #with True and Pred
+
+    zero_columns = [col for col in df.columns if (df[col] == 0).all()]
+    zero_rows = df.index[(df == 0).all(axis=1)].tolist()
+    
+    df = df.drop(index=zero_rows)
+    df = df.drop(columns=zero_columns)
+
+    #Metrics     
+    accuracy = metrics.accuracy_score(references, predictions)
+    f1_macro = f1_score(references, predictions, average="macro") #'macro' - average of the f1 scores
+    #f1_none = f1_score(references, predictions, average=None)  #None - for all classes individually; As an Array
+
+    print(f"Matrix with the dimensions {df.shape} has a:\nAccuracy Score: {accuracy}\nF1 Score: {f1_macro}")
+            
+    
+    return df
+
+C1 = confmat(predictions,references)
+C2 = confmat(predictions_animals, references)
+C3 = confmat(predictions_animals_shortened, references_shortened)
+
+#########################################################
+# Export to Excel
+#########################################################
+
+dataframes = {'C1': C1, 'C2': C2, 'C3': C3}
+
+# Export DataFrames to Excel
+output_file = 'YOLO_Ergebnisse.xlsx'
+
+with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+    for sheet_name, df in dataframes.items():
+        df.to_excel(writer, sheet_name=sheet_name, index=True)
+        
+print(f"DataFrames exported to {output_file}")
+
+#Time
+stop = timeit.default_timer()
+print('Time: ', stop - start)  
